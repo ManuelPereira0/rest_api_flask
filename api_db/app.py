@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, session
 from flask import request
 from flask_restful import Api
 from flask_restful import Resource
@@ -6,6 +6,7 @@ from models import Pessoas
 from models import Atividades
 from models import Usuarios
 from flask_httpauth import HTTPBasicAuth
+from sqlalchemy.orm import joinedload
 
 auth = HTTPBasicAuth()
 app = Flask(__name__)
@@ -21,11 +22,14 @@ class Pessoa(Resource):
     @auth.login_required
     def get(self, nome):
         pessoa = Pessoas.query.filter_by(nome=nome).first()
+        atividades = Atividades.query.join(Pessoas).filter(Pessoas.nome == nome).all()
+        nome_atividades = [atividade.nome for atividade in atividades]
         try:
             response = {
                 'nome': pessoa.nome,
                 'idade': pessoa.idade,
-                'id': pessoa.id
+                'id': pessoa.id,
+                'atividades':nome_atividades
             }
             
         except AttributeError:
@@ -89,7 +93,7 @@ class ListaAtividadesPessoa(Resource):
                 'id':atividade.id,
                 'nome':atividade.nome,
                 'pessoa':atividade.pessoa.nome,
-                'id pessoa':atividade.id_pessoa
+                'id_pessoa':atividade.id_pessoa
             }
         
         except AttributeError:
@@ -104,16 +108,32 @@ class InserirAtividades(Resource):
         atividade = Atividades(nome=dados['nome'], pessoa=pessoa)
         atividade.save()
         return {'status': 'Sucesso', 'mensagem': f'Registro com o ID {atividade.id} inserido com sucesso!'}
+    
+
+class ListaPorAtividades(Resource):
+    def get(self, atividade):
+        pessoas = Pessoas.query.join(Atividades).filter(Atividades.nome == atividade).all()
+        nomes_pessoas = [pessoa.nome for pessoa in pessoas]
+        try:
+            response = {
+                'nome':atividade,
+                'pessoa':nomes_pessoas
+            }
+             
+        except AttributeError:
+            response = {'status':'Erro', 'menssagem':f'Não foi possivel encontrar uma tarefa com esse nome'}
+        
+        return response
         
         
     
-           
 api.add_resource(Pessoa, '/pessoa/<string:nome>')   
 api.add_resource(ListaPessoas, '/pessoa/')
 api.add_resource(InserirPessoas, '/pessoa/')
 api.add_resource(InserirAtividades, '/atividade/')
 api.add_resource(ListaGeralAtividades, '/atividade/')
 api.add_resource(ListaAtividadesPessoa, '/atividade/<int:id_pessoa>')
+api.add_resource(ListaPorAtividades, '/atividade/<string:atividade>')
     
 if __name__ == '__main__':
     app.run(debug=True)
